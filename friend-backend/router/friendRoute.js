@@ -1,7 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/userSchema');
-const bcrypt = require('bcryptjs');
+const FriendRequest = require('../models/friendRequest');
 
 const SECRET_KEY = 'Letsmakenewfriends';
 
@@ -17,6 +17,11 @@ const authMiddleware = (req, res, next) => {
     next();
   });
 };
+
+router.use((req, res, next) => {
+  req.io = req.app.get('io');
+  next();
+});
 
 router.get('/home', authMiddleware, async (req, res) => {
   try {
@@ -43,33 +48,73 @@ router.get('/search', authMiddleware, async (req, res) => {
 
 router.post('/send-request', authMiddleware, async (req, res) => {
   try {
-    const { friendId } = req.body;
-    const user = await User.findById(req.userId);
-    if (user.friends.includes(friendId)) {
-      return res.status(400).send({ error: 'Already friends' });
+    const { receiverId } = req.body;  
+
+  
+    if (req.userId === receiverId) {
+      return res.status(400).send({ error: 'You cannot send a friend request to yourself' });
     }
-    res.send({ message: 'Friend request sent' });
+
+  
+    const existingRequest = await FriendRequest.findOne({
+      sender: req.userId,
+      receiver: receiverId,
+    });
+
+    if (existingRequest) {
+      return res.status(400).send({ error: 'Friend request already sent' });
+    }
+
+  
+    const newRequest = new FriendRequest({
+      sender: req.userId,
+      receiver: receiverId,
+    });
+
+    await newRequest.save();
+
+    req.io.emit('friend-request', { senderId: req.userId, receiverId });
+
+    res.status(200).send({ message: 'Friend request sent' });
   } catch (error) {
-    res.status(500).send({ error: 'Error sending request' });
+    console.error(error);
+    res.status(500).send({ error: 'Error sending friend request' });
   }
 });
 
 router.post('/manage-request', authMiddleware, async (req, res) => {
   try {
-    const { friendId, action } = req.body;
-    const user = await User.findById(req.userId);
+    const { friendRequestId, action } = req.body;
+
+    const friendRequest = await FriendRequest.findById(friendRequestId);
+
+    if (!friendRequest) {
+      return res.status(404).send({ error: 'Friend request not found' });
+    }
+
+    if (friendRequest.receiver.toString() !== req.userId) {
+      return res.status(403).send({ error: 'You are not authorized to manage this request' });
+    }
 
     if (action === 'accept') {
-      user.friends.push(friendId);
-      await user.save();
+      friendRequest.status = 'accepted';
+      await friendRequest.save();
+
+      req.io.emit('friend-request-status', { friendRequestId, action: 'accepted' });
+
       res.send({ message: 'Friend request accepted' });
     } else if (action === 'reject') {
+      friendRequest.status = 'rejected';
+      await friendRequest.save();
+
+      req.io.emit('friend-request-status', { friendRequestId, action: 'rejected' });
+
       res.status(302).send({ message: 'Friend request rejected' });
     } else {
       res.status(400).send({ error: 'Invalid action' });
     }
   } catch (error) {
-    res.status(500).send({ error: 'Error managing request' });
+    res.status(500).send({ error: 'Error managing friend request' });
   }
 });
 
@@ -102,5 +147,26 @@ router.get('/recommend-friends', authMiddleware, async (req, res) => {
     res.status(500).send({ error: 'Error fetching recommendations' });
   }
 });
+
+
+router.get('/sent-requests', authMiddleware, async (req, res) => {
+  try {
+    const sentRequests = await FriendRequest.find({ sender: req.userId }).populate('receiver', 'username');
+    res.send(sentRequests);
+  } catch (error) {
+    res.status(500).send({ error: 'Error fetching sent requests' });
+  }
+});
+
+
+router.get('/received-requests', authMiddleware, async (req, res) => {
+  try {
+    const receivedRequests = await FriendRequest.find({ receiver: req.userId }).populate('sender', 'username');
+    res.send(receivedRequests);
+  } catch (error) {
+    res.status(500).send({ error: 'Error fetching received requests' });
+  }
+});
+
 
 module.exports = router;
