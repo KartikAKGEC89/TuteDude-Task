@@ -26,10 +26,9 @@ router.use((req, res, next) => {
 router.get('/home', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.userId).populate('friends');
-    const allUsers = await User.find({ _id: { $ne: req.userId } });
     res.send({
       user,
-      allUsers,
+      allUsers: user.friends,
     });
   } catch (error) {
     res.status(500).send({ error: 'Error fetching users' });
