@@ -14,7 +14,7 @@ const Navbar = () => {
     setLoading(false);
   }, []);
 
-  const userImage = "https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Generic_avatar.png/456px-Generic_avatar.png";
+  const userImage = "https://png.pngtree.com/png-clipart/20231019/original/pngtree-user-profile-avatar-png-image_13369990.png";
 
   const handleLogout = () => {
   localStorage.removeItem('token');
@@ -25,7 +25,7 @@ const Navbar = () => {
   return (
     <div className="bg-gray-800 p-4 flex items-center justify-between">
       <div className="flex items-center space-x-2 text-white">
-        <img src={userImage} alt="User Avatar" className="w-8 h-8 rounded-full" />
+        <img src={userImage} alt="User Avatar" className="w-12 h-12 rounded-full" />
         {loading ? (
           <span>Loading...</span>
         ) : error ? (
