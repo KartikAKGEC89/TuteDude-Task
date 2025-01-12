@@ -4,28 +4,34 @@ const User = require('./models/userSchema');
 const dotenv = require('dotenv');
 dotenv.config();
 
-const users = [
-  {
-    username: 'john_doe',
-    password: 'password123',
-    interests: ['coding', 'music', 'reading'],
-  },
-  {
-    username: 'jane_doe',
-    password: 'password456',
-    interests: ['traveling', 'photography', 'sports'],
-  },
-  {
-    username: 'alice',
-    password: 'alice2023',
-    interests: ['gaming', 'cooking', 'hiking'],
-  },
-  {
-    username: 'bob',
-    password: 'bob2023',
-    interests: ['fitness', 'movies', 'gardening'],
-  },
-];
+const generateRandomUsername = (index) => {
+  return `user_${index + 1}`;
+};
+
+const generateRandomInterests = () => {
+  const interestsList = ['coding', 'music', 'reading', 'traveling', 'photography', 'sports', 'gaming', 'cooking', 'fitness', 'movies', 'gardening', 'hiking'];
+  const randomInterests = [];
+  const numInterests = Math.floor(Math.random() * 3) + 2; 
+  for (let i = 0; i < numInterests; i++) {
+    const randomInterest = interestsList[Math.floor(Math.random() * interestsList.length)];
+    if (!randomInterests.includes(randomInterest)) {
+      randomInterests.push(randomInterest);
+    }
+  }
+  return randomInterests;
+};
+
+const generateUsers = (numUsers = 100) => {
+  const users = [];
+  for (let i = 0; i < numUsers; i++) {
+    users.push({
+      username: generateRandomUsername(i),
+      password: `password${i + 1}`,
+      interests: generateRandomInterests(),
+    });
+  }
+  return users;
+};
 
 const seedUsers = async () => {
   try {
@@ -39,6 +45,9 @@ const seedUsers = async () => {
     console.log('Cleared existing users');
 
     const userDocs = [];
+    const users = generateUsers(100); 
+
+  
     for (const user of users) {
       const hashedPassword = await bcrypt.hash(user.password, 10);
       user.password = hashedPassword;
@@ -49,25 +58,29 @@ const seedUsers = async () => {
       console.log(`Created user: ${user.username}`);
     }
 
-
-    if (userDocs.length > 1) {
-   
-      await User.findByIdAndUpdate(userDocs[0]._id, {
-        $push: { friends: userDocs[1]._id },
-      });
-      await User.findByIdAndUpdate(userDocs[1]._id, {
-        $push: { friends: userDocs[0]._id },
-      });
-
+  
+    for (let i = 0; i < userDocs.length; i++) {
+      const currentUser = userDocs[i];
+      const friendsToAdd = [];
       
-      await User.findByIdAndUpdate(userDocs[2]._id, {
-        $push: { friends: userDocs[3]._id },
-      });
-      await User.findByIdAndUpdate(userDocs[3]._id, {
-        $push: { friends: userDocs[2]._id },
+      while (friendsToAdd.length < 5) {
+        const randomFriend = userDocs[Math.floor(Math.random() * userDocs.length)];
+        if (randomFriend._id.toString() !== currentUser._id.toString() && !friendsToAdd.includes(randomFriend._id.toString())) {
+          friendsToAdd.push(randomFriend._id.toString());
+        }
+      }
+
+      await User.findByIdAndUpdate(currentUser._id, {
+        $push: { friends: { $each: friendsToAdd } },
       });
 
-      console.log('Added friends between users');
+      for (const friendId of friendsToAdd) {
+        await User.findByIdAndUpdate(friendId, {
+          $push: { friends: currentUser._id },
+        });
+      }
+
+      console.log(`Added friends for user: ${currentUser.username}`);
     }
 
     console.log('Seeding complete!');
