@@ -49,8 +49,6 @@ const seedUsers = async () => {
 
   
     for (const user of users) {
-      const hashedPassword = await bcrypt.hash(user.password, 10);
-      user.password = hashedPassword;
 
       const newUser = new User(user);
       const savedUser = await newUser.save();
