@@ -91,46 +91,80 @@ router.post('/manage-request', authMiddleware, async (req, res) => {
       return res.status(404).send({ error: 'Friend request not found' });
     }
 
+   
     if (friendRequest.receiver.toString() !== req.userId) {
       return res.status(403).send({ error: 'You are not authorized to manage this request' });
     }
 
+   
     if (action === 'accept') {
       friendRequest.status = 'accepted';
       await friendRequest.save();
 
+      
+      const sender = await User.findById(friendRequest.sender);
+      const receiver = await User.findById(friendRequest.receiver);
+
+      if (!sender || !receiver) {
+        return res.status(404).send({ error: 'Sender or Receiver not found' });
+      }
+
+      
+      if (!receiver.friends.includes(sender._id)) {
+        receiver.friends.push(sender._id);
+      }
+      if (!sender.friends.includes(receiver._id)) {
+        sender.friends.push(receiver._id);
+      }
+
+      
+      await sender.save();
+      await receiver.save();
+
       req.io.emit('friend-request-status', { friendRequestId, action: 'accepted' });
 
-      res.send({ message: 'Friend request accepted' });
-    } else if (action === 'reject') {
+      return res.send({ message: 'Friend request accepted' });
+
+    } 
+   
+    else if (action === 'reject') {
       friendRequest.status = 'rejected';
       await friendRequest.save();
 
       req.io.emit('friend-request-status', { friendRequestId, action: 'rejected' });
 
-      res.status(302).send({ message: 'Friend request rejected' });
-    } else {
-      res.status(400).send({ error: 'Invalid action' });
+      return res.status(302).send({ message: 'Friend request rejected' });
+
+    } 
+    else {
+      return res.status(400).send({ error: 'Invalid action' });
     }
+
   } catch (error) {
-    res.status(500).send({ error: 'Error managing friend request' });
+    console.error(error);
+    return res.status(500).send({ error: 'Error managing friend request' });
   }
 });
+
 
 
 router.get('/recommend-friends', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.userId).populate('friends', 'friends username');
-    const userFriendIds = user.friends.map((friend) => friend._id);
+    const userFriendIds = user.friends.map((friend) => friend._id.toString());
+
 
     const candidates = await User.find({
       _id: { $nin: [...userFriendIds, req.userId] },
-    }).populate('friends', 'username');
+    }).populate('friends', 'username _id');
 
+   
     const recommendations = candidates.map((candidate) => {
+     
       const mutualFriends = candidate.friends.filter((friend) =>
         userFriendIds.includes(friend._id.toString())
       );
+
       return {
         _id: candidate._id,
         username: candidate.username,
@@ -139,13 +173,16 @@ router.get('/recommend-friends', authMiddleware, async (req, res) => {
       };
     });
 
+
     recommendations.sort((a, b) => b.mutualFriendsCount - a.mutualFriendsCount);
 
     res.send(recommendations);
   } catch (error) {
+    console.error(error);
     res.status(500).send({ error: 'Error fetching recommendations' });
   }
 });
+
 
 
 router.get('/sent-requests', authMiddleware, async (req, res) => {
